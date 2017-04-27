@@ -1,0 +1,75 @@
+{
+   <MPI_Init uninitialized>
+   Memcheck:Param
+   writev(vector[...])
+   ...
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+   fun:PI_Configure_
+   fun:main
+}
+{
+   <MPI_Init leaks>
+   Memcheck:Leak
+   fun:?alloc
+   ...
+   fun:ompi_mpi_init
+}
+{
+   <MPI event loop leaks>
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:opal_event_base_loop
+}
+{
+   <MPI_Comm_create_errhandler no way to delete it>
+   Memcheck:Leak
+   fun:malloc
+   fun:ompi_errhandler_create
+   fun:PMPI_Comm_create_errhandler
+   fun:PI_Configure_
+   fun:main
+}
+{
+   <orte leaks>
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:orte_util_nidmap_init
+}
+{
+   <orte leaks>
+   Memcheck:Leak
+   fun:*alloc
+   ...
+   fun:orte_init
+}
+{
+   <opal leaks>
+   Memcheck:Leak
+   fun:calloc
+   ...
+   fun:opal_init
+}
+{
+   <opal leaks>
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:opal_hwloc_unpack
+}
+{
+   <libxml leaks>
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:xmlParse*
+}
+{
+   <libxml leaks>
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:xmlCheckVersion
+}

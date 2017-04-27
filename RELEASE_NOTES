@@ -1,0 +1,198 @@
+=======================
+RELEASE_NOTES for Pilot
+=======================
+:date: 9 Feb 2017
+:version: Version 3.2
+
+* The V3.1 problem of long names in the visual log has been fixed.
+
+* The Lab Exercises problem of Fortran labs failing to build has been fixed (Makefile modified).
+
+* V3.2 (finally) upgrades the Fortran API by adding support for PI_Scatter and PI_Reduce.
+
+In C Pilot, processes sending data to a reduction will call ordinary PI_Write, but in the Fortran API they call a new subroutine PI_WriteReduce in order to supply the reduction operator. See the Quick Reference Card for the table of operators (except "mop" cannot be used). For example::
+
+    INTEGER, TARGET :: contrib
+    CALL PI_WriteReduce( chan, PI_INTEGER, 1, contrib, "+" )
+    ---
+    INTEGER, TARGET :: total
+    CALL PI_Reduce( bund, PI_INTEGER, 1, total, "+" )
+
+PI_Scatter is called the same way as the other collective functions, PI_Gather, and PI_Broadcast.
+
+* There is a new Fortran demo program, fdemo_log.F90, in the tests subdirectory. It basically mirrors demo_log.c, and can also be run with -pisvc=j to get the Jumpshot log. The main difference from the C version of the log is that Fortran data values display as "?" (since they're handled by C code that treats them as opaque objects).
+
+
+:date: 30 Jan 2017
+:version: Version 3.1
+
+* V3.1 includes MPE logging, enabled by -pisvc=j ("j" stands for Jumpshot). This produces a .clog2 file of all Pilot API calls.
+
+Use Jumpshot-4 to convert it to SLOG-2 format, and open the .slog2 file to obtain a visual representation. Jumpshot-4 should be run with JDK 8 or higher, otherwise font problems have been noticed. Jumpshot does not need to be on the same computer as Pilot.
+
+Installation of the MPE library is optional (see Makefile and tests/Makefile). If Pilot is not built with MPE, the "j" option will give a warning.
+
+MPE logging coexists with Pilot native call logging ("c" option); both logs can be produced (-pisvc=cj). MPE logging does not require an extra MPI process the way native logging does.
+
+Known issues with MPE logging:
+
+#. If your Pilot application aborts, the MPE log will likely not be written out to the disk. We are looking for a solution to this.
+#. (FIXED in V3.2) If you like to use PI_SetName on your processes, channels, and bundles, be aware that long names cause a buffer overflow. This will result in Jumpshot crashing when you right-click an object to get its information popup. This problem will be fixed in the next release. For now, it is safer to avoid PI_SetName in conjunction with visual logging.
+#. (FIXED in Lab Exercises with V3.2 release) If you try to build the Fortran labs (flab1, etc.) in the Lab Exercises, the link step fails because the MPE library is specified before the Pilot library.
+
+
+:date: 9 May 2014
+:version: Version 3.0
+
+* V3.0 is released to make Pilot Open Source Software under the LGPL (see LICENSE, COPYING, and COPYING.LESSER files). The project is currently hosted on code.google.com as pilot-library.
+
+* Levels 2 and 3 of error checking have been implemented (level 1 is still the default).
+
+Level 2 compares reader/writer formats to make sure they match in both data type and length. For simple channel write/read, the reader will do the comparison. For collective operations, the process at the "narrow" end of the bundle (the one that calls the collective function) will broadcast its format to the other parties, and the latter (who could potentially all have different formats) will do the comparisons. Error PI_FORMAT_MISMATCH will be issued if the comparison fails. For efficiency, format data is compacted into a single integer value. This level of checking results in sending an extra MPI message for each Pilot I/O function, so it adds considerable overhead and is not recommended after a program is debugged.
+
+Level 3 checks all pointer arguments in Pilot I/O functions to make sure they look like pointers. This is especially helpful for diagnosing a typical "fscanf" type of error where the user codes a variable name but forgets to prefix with "&". The validation algorithm is not likely to falsely issue the new PI_BOGUS_POINTER_ARG error for legitimate pointers, but it is always possible that a data value may look like a valid pointer, so it cannot guarantee foolproof detection of such arguments. This level of checking has moderate overhead, and is not recommended after a program is debugged. Requesting level N also activates the checks for all lower levels.
+
+
+:date: 27 September 2013
+:version: Version 2.1
+
+* The most requested feature has been to make it easier to write/read variable length data. This is a matter of convenience, since it can already be done in two steps -- the length is communicated first, then the reader allocates a buffer prior to reading the actual data. For V2.1, a new format symbol ``^`` (the caret flag) has been introduced to signify a dynamic array. When used instead of a ``*`` star, it makes the writer send the length of the array, and the reader obtain that length from the writer and automatically allocate right-sized storage. The actual length and the location are returned in successive reader arguments. The programmer is responsible for freeing the array in due course. Example of usage::
+
+	double arrout[500];
+	PI_Write( chan, "^lf", 500, arrout );	// supply length and address of array
+	---
+	double *arrptr;
+	int arrlen;
+	PI_Read( chan, "^lf", &arrlen, &arrptr );// arrlen=500 and arrptr->new double[500]
+	free( arrptr );
+
+A new format datatype similar to stdio.h ``%s`` piggybacks on this feature internally to communicate NUL-terminated C-strings. On writing, PI_Write finds out the length of the string and incorporates that automatically into the outgoing length message. On reading, PI_Read automatically allocates a right-sized char array (which the programmer should free) to receive the input. Example of usage::
+
+	char *outstring = "Send this data";
+	PI_Write( chan, "%s", outstring );	// supply address of char array
+	---
+	char *instring;
+	PI_Read( chan, "%s", &instring );	// instring->new char[15]
+	free( instring );
+
+Thus, the following are equivalent and can even be mixed (i.e., "%s" on one side, "%^c" on the other):
+
+	PI_Write( chan, "%s", outstring ); <=> PI_Write( chan, "%^c", 1+strlen(outstring), outstring );
+	PI_Read( chan, "%s", &instring ); <=> PI_Read( chan, "%^c", &len, &instring );	
+	
+As of V2.1, the string format and caret flag work for individual channels and for PI_Broadcast. In future, their usage may be extended to PI_Scatter and PI_Gather, but they don't make sense in the context of PI_Reduce.
+
+Summary: There are now 4 ways to specify the length of non-scalar data: (1) an integer format constant for fixed length data; (2) a * with the length supplied in the next argument for fixed or variable length data; (3) a ^ with the length supplied in the next argument for automatic allocation; and (4) implicit length for a %s string.
+
+* Call logging (-pisvc=c) has been greatly enhanced with useful data. Log entries now show the length of data being transferred and the value (or first value if an array).
+
+* PI_SetCommWorld was added for the specific purpose of facilitating the "Pilotizing" of IMB benchmarks. It allows PI_Configure to work with a subset of ranks that were started by mpirun. Ordinary users would not need this function.
+
+* There is now a valgrind suppression file, ompi-valgrind.supp, based on OpenMPI on Linux, in case you are checking your application for memory leaks, etc. Pilot itself checks out clean, but OpenMPI has a lot of issues tied to initialization time and libxml.
+
+
+:date: 29 May 2011
+:version: Version 2.0
+
+* V2.0 increases Pilot's capability to access MPI's collective operations. There are two new bundle types -- PI_SCATTER, PI_REDUCE -- in addition to the existing PI_BROADCAST, PI_GATHER, and PI_SELECT. New API functions are paired with PI_Read/Write as follows::
+
+	PI_Scatter(bundle) -> PI_Read(channel)
+	PI_Reduce(bundle) <- PI_Write(channel)
+
+* PI_Scatter is the logical inverse of PI_Gather, collecting N same-sized data from worker processes into a contiguous array. The ordering is the same as the corresponding channels were listed in the configuration phase call to ``PI_CreateBundle(PI_SCATTER,...)``.
+
+* To allow the reduction operation to be conveniently specified, a new format symbol "/" is introduced to indicate the presence of a reduction operator. The operator is coded between % and /, e.g., ``%+/d``. If the format specifies an array, the operator applies element-wise across the contributing processes. It is a normal C operator (+, &&, ^, etc.), or "min" or "max". See pilot.h for details. If the user is willing to call MPI_Op_create directly, a user-defined function of type MPI_Op can be specified for PI_Reduce and its matching PI_Write by coding ``%mop/...`` and supplying the MPI_Op as the next argument. Note that the reduction format has to be specified on both ends of the bundle/channel. This is a requirement for the underlying MPI implementation.
+
+* The Fortran API has not yet been upgraded with PI_Scatter and PI_Reduce.
+
+* The default level of error-checking has been changed from 0 (minimum) to 1 (additional checks). To get minimal checking, specify "-picheck=0" in the execution command line, or set global variable PI_CheckLevel=0 before calling PI_Configure.
+
+* Some error messages have been improved, especially those reporting a deadlock.
+
+
+:date: 9 January 2010
+:version: Version 1.2
+
+* V1.2 introduces an experimental Fortran API, which is subject to change. It requires support for the ISO_C_BINDING module, and has only been tested with the Intel compiler so far. To use it, #include "pilot.for" in a Fortran program.
+
+* Some implementations of MPI do not generate symbols for Fortran data types (e.g., MPI_INTEGER1) in mpi.h if you did not enable Fortran language bindings at MPI installation time. This is known to be the case for Open MPI. If the preprocessor symbol MPID_NO_FORTRAN is defined, as it would be by Open MPI in this scenario, then pilot.c will suppress compiling those symbols. If your MPI also has this issue, shown by compilation errors for those symbols, add -DMPID_NO_FORTRAN to CFLAGS in Makefile and that should solve the problem. Let us know, and we will try to handle it within pilot.c in the next release.
+
+* Here are the Fortran API equivalents of Pilot's C API, using C-like argument syntax just to illustrate the types. Output arguments are flagged with "^". Those without function syntax are subroutines and need "CALL"::
+
+	PI_Configure( ^INTEGER numprocs )
+	PI_PROCESS = PI_CreateProcess( workfunc, INTEGER n )
+	PI_CHANNEL = PI_CreateChannel( PI_CHANNEL from, PI_CHANNEL to )
+	PI_CopyChannels( INTEGER direction, PI_CHANNEL array(*), INTEGER size, ^PI_CHANNEL copies(*) )
+	PI_BUNDLE = PI_CreateBundle( INTEGER usage, PI_CHANNEL array(*), INTEGER size )
+	PI_StartAll()
+	PI_SetName( PI_PROCESS/CHANNEL/BUNDLE obj, CHARACTER*(*) name )
+	PI_GetName( PI_PROCESS/CHANNEL/BUNDLE obj, ^CHARACTER*(*) name )
+	PI_CHANNEL = PI_GetBundleChannel( PI_BUNDLE bund, INTEGER index )
+	INTEGER = PI_GetBundleSize( PI_BUNDLE bund )
+	PI_Write( PI_CHANNEL to, datatype, INTEGER size, buffer )
+	PI_Read( PI_CHANNEL from, datatype, INTEGER size, ^buffer )
+	LOGICAL = PI_ChannelHasData( PI_CHANNEL chan )
+	PI_Broadcast( PI_BUNDLE to, datatype, INTEGER size, buffer )
+	PI_Gather( PI_BUNDLE to, datatype, INTEGER size, buffer )
+	INTEGER = PI_Select( PI_BUNDLE selector )
+	INTEGER = PI_TrySelect( PI_BUNDLE selector )
+	PI_StartTime()
+	DOUBLE_PRECISION = PI_EndTime()
+	PI_Log( CHARACTER*(*) text )
+	LOGICAL = PI_IsLogging()
+	PI_Abort( CHARACTER*(*) text )
+	PI_StopMain( INTEGER status )
+
+* Pilot codes for Fortran datatypes are listed in pilot.for (e.g., PI_INTEGER8). Note that PI_PROCESS, etc., are declared without C's "*" pointer. Since they are considered "derived datatypes", global PI_CHANNEL/PI_BUNDLE variables/arrays need to be defined in a MODULE; they are not accepted in COMMON blocks. Also note that some C enumerated datatypes (PI_SELECT) had to be enhanced (PI_BUN_SELECT) because Fortran does not recognized case (ergo, the PI_SELECT symbol would alias with the PI_Select function).
+
+* The prototype for the workfunc argument to PI_CreateProcess is::
+
+	INTEGER(C_INT) FUNCTION workfunc( n, hook )
+	#include "pilot.for"
+	  USE (module where channels defined)
+	  INTEGER(C_INT), INTENT(IN) :: n
+	  TYPE(C_PTR), INTENT(IN) :: hook
+	  (function body)
+	  workfunc = 0
+	END FUNCTION
+
+* While a workfunc takes two arguments, as in the C API, the second (hook) is not used yet, because Fortran has no equivalent to C's "void*" argument.
+
+* PI_GetName can now be called any time (formerly restricted to execution phase).
+
+* Deadlock detection could give "false positives" due to MPI_Send's semantics, which may or may not block the caller. If deadlock detection is running, PI_Write now uses MPI_Ssend, which matches CSP channel semantics. When it is not running, MPI_Send is used as before. Deadlock detection now filters out non-blocking events of PI_TrySelect and PI_ChannelHasData, in case the program has a busy-waiting loop (which floods the detector process with events). Diagnostic messages printed when deadlock is detected have been improved to help identify the deadlocking operations.
+
+
+:date: 22 September 2009
+:version: Version 1.1
+
+* V1.1 provides formats for all C/MPI data types::
+
+  %c	char		MPI_CHAR
+  %hhu	unsigned char	MPI_UNSIGNED_CHAR
+  %d, %i int		MPI_INT
+  %hd	short int	MPI_SHORT
+  %ld	long int	MPI_LONG
+  %lld	long long int	MPI_LONG_LONG
+  %u	unsigned int	MPI_UNSIGNED
+  %f	float		MPI_FLOAT
+  %lf	double		MPI_DOUBLE
+  %Lf	long double	MPI_LONG_DOUBLE
+  %b	any		MPI_BYTE
+  %m	user-defined	MPI_Datatype variable
+
+  u gives corresponding unsigned integer types: hu, lu, llu
+
+* To utilize the new %m format, one must call the relevant MPI functions directly to construct the custom type in a variable of type MPI_Datatype. The variable is then passed as an extra argument to PI_Read, PI_Write, etc. That is, %m consumes the next two arguments in the list (or three if ``*`` is coded). For example: ``PI_Write( "%*m", len, mytype, buff );`` where len is the number of mytype elements in the buff array.
+
+* A format length of literal one (1) is no longer allowed to avoid (a) confusing %1f (array of one float) with %lf (scalar double), and (b) confusing scalar float with array of one float (which require different arguments to PI_Write, ``float`` vs. ``float*``). An array of one type T can always be specified using ``%*T``.
+
+* Error detection has been greatly strengthened for format strings.
+
+* Deadlock detection is more accurate (certain event sequences involving PI_Select could be diagnosed as deadlocked when they were actually valid).
+
+* Deadlock tests script deadlock_tests.sh allows for multiple deadlock diagnoses to account for any order of execution.
+
+* More regression tests have been created.
+
+* Source files have been cleaned up with consistent use of doxygen tags.

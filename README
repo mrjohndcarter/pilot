@@ -1,0 +1,50 @@
+================
+README for Pilot
+================
+:date: 9 Feb 2017
+:version: Version 3.2
+
+Thank you for downloading Pilot.
+
+Pilot presents a friendly face to the Message Passing Interface (MPI) that
+allows a simpler programming model and provides many safety features that are
+not available in MPI.
+
+The Pilot website is located at:
+
+    http://carmel.socs.uoguelph.ca/pilot/
+
+The latest release of Pilot can be found at:
+
+    http://carmel.socs.uoguelph.ca/pilot/releases/
+
+
+First Steps
+===========
+
+    If you are new to Pilot, here's how we recommend you start:
+
+    1. Read the LICENSE file and make sure you understand and accept it.
+
+    2. You will want to read the INSTALL file for information about getting the
+       library compiled and installed.
+
+    3. You should then go through the tutorial at
+       http://carmel.socs.uoguelph.ca/pilot/docs/tutorial/ or tutorial.rst in the
+       "docs" directory.
+
+    4. There are a set of man pages in the "docs" directory. Installation of
+       these pages is described in the INSTALL file. You can use these pages as
+       reference material as you start developing real code. The page you will
+       probably be most interested in is called "pilot.h".
+       
+    5. Also check out the Training Materials on the Pilot website, which include
+       PDF Slides used to teach Pilot, accompanying hands-on Lab Exercises, and
+       a handy Quick Reference Card for the C API.
+
+
+Reporting Problems
+==================
+
+    If you find bugs or problems with the software, please contact
+    Bill Gardner <gardnerw@uoguelph.ca>.
